@@ -6,6 +6,7 @@ dist/
 build/
 
 # Data files to exclude
+data/
 akamatsulab_top100_similar_nodes.json
 plugin-testing-akamatsulab2_query-results_202512231309.json
 
