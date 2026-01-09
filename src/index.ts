@@ -49,7 +49,7 @@ const __dirname = path.dirname(__filename);
 // Data path - can be overridden with DATA_PATH env var
 const DATA_PATH =
   process.env.DATA_PATH ||
-  path.join(__dirname, "..", "plugin-testing-akamatsulab2_query-results_202512231309.json");
+  path.join(__dirname, "..", "data", "megacoglab_query-results_202601090910.json");
 
 // Initialize data store (will be populated on startup)
 let dataStore: DataStore;

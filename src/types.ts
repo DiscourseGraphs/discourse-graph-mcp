@@ -6,10 +6,10 @@
  */
 
 // Node types in the discourse graph - extracted from [[XXX]] prefix in titles
-export type NodeType = "RES" | "QUE" | "CON" | "EVD" | "CLM" | "HYP" | "ISS";
+export type NodeType = "RES" | "QUE" | "CON" | "EVD" | "CLM" | "HYP" | "ISS" | "ART" | "PTN" | "THE";
 
 // All valid node type values for validation
-export const VALID_NODE_TYPES: NodeType[] = ["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS"];
+export const VALID_NODE_TYPES: NodeType[] = ["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS", "ART", "PTN", "THE"];
 
 /**
  * Parsed and indexed discourse node
@@ -149,11 +149,11 @@ export const NODE_TYPE_SCHEMAS: Record<NodeType, NodeTypeSchema> = {
   },
   EVD: {
     label: "Evidence",
-    description: "Supporting data extracted from published papers"
+    description: "a specific empirical observation from a particular study"
   },
   CLM: {
     label: "Claim",
-    description: "Assertion about biological mechanisms"
+    description: "atomic, generalized assertions about the world that (propose to) answer research questions"
   },
   HYP: {
     label: "Hypothesis",
@@ -162,5 +162,18 @@ export const NODE_TYPE_SCHEMAS: Record<NodeType, NodeTypeSchema> = {
   ISS: {
     label: "Issue",
     description: "Project task or analysis to be done"
+  },
+  ART: {
+    label: "Artifact",
+    description: "specific concrete systems (prototypes, standards, etc.) that instantiate one or more conceptual patterns or methods"
+  },
+  PTN: {
+    label: "Pattern",
+    description: "conceptual classes such as theoretical objects, heuristics, design patterns, and system/methodological approaches, that are abstracted from a *specific* implementation. They are what make specific systems 'work' or not, matched to a model of the problem."
+  },
+  THE: {
+    label: "Theory",
+    description: "high-level, abstracted explanations of phenomena that unify multiple patterns and/or artifacts. can consist of systems of claims."
   }
+
 };

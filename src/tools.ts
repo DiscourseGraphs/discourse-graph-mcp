@@ -47,10 +47,10 @@ export const SearchNodesSchema = z.object({
     .string()
     .describe("Keywords to search for (e.g., 'membrane tension force capping')"),
   nodeType: z
-    .enum(["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS"])
+    .enum(["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS", "ART", "PTN", "THE"])
     .optional()
     .describe(
-      "Filter by node type. RES=Results, QUE=Questions, CON=Conclusions, EVD=Evidence, CLM=Claims, HYP=Hypotheses, ISS=Issues"
+      "Filter by node type. RES=Results, QUE=Questions, CON=Conclusions, EVD=Evidence, CLM=Claims, HYP=Hypotheses, ISS=Issues, ART=Artifacts, PTN=Patterns, THE=Theories"
     ),
   creator: z
     .string()
@@ -90,7 +90,7 @@ export const GetResearcherContributionsSchema = z.object({
       "Researcher name to filter by (optional - if omitted, returns summary for all researchers)"
     ),
   nodeType: z
-    .enum(["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS"])
+    .enum(["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS", "ART", "PTN", "THE"])
     .optional()
     .describe("Filter by node type")
 });
@@ -351,8 +351,8 @@ export function handleGetSchema() {
           {
             nodeTypes: NODE_TYPE_SCHEMAS,
             domain:
-              "Cellular biophysics: endocytosis mechanics, membrane tension, actin architecture and dynamics, Cytosim simulations",
-            lab: "Akamatsu Lab",
+              "Interdisciplinary: Human-computer interaction, cognitive science, applied machine learning and metascience",
+            lab: "OASIS Lab",
             dataSource: "Roam Research discourse graph"
           },
           null,
@@ -611,7 +611,7 @@ export const TOOL_DEFINITIONS = {
   search_nodes: {
     name: "search_nodes",
     description:
-      "Search the Akamatsu lab discourse graph for research nodes about endocytosis, membrane tension, actin dynamics, and related cellular biophysics. Use this when looking for specific Results, Conclusions, Evidence, Questions, Hypotheses, or Claims from the lab's research. Always include the researcher name when citing results.",
+      "Search the lab discourse graph for research nodes. Use this when looking for specific Results, Conclusions, Evidence, Questions, Hypotheses, Claims, Artifacts, Patterns, or Theories from the lab's research. Always include the researcher name when citing results.",
     schema: SearchNodesSchema
   },
   get_node: {
@@ -629,7 +629,7 @@ export const TOOL_DEFINITIONS = {
   get_schema: {
     name: "get_schema",
     description:
-      "Get the discourse graph ontology showing node types and their meanings. Use this to understand what types of nodes exist (Results, Questions, Conclusions, Evidence, Claims, Hypotheses, Issues) and how they relate.",
+      "Get the discourse graph ontology showing node types and their meanings. Use this to understand what types of nodes exist (Results, Questions, Conclusions, Evidence, Claims, Hypotheses, Issues, Artifacts, Patterns, Theories) and how they relate.",
     schema: GetSchemaSchema
   },
   get_researcher_contributions: {
