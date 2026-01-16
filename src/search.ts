@@ -67,6 +67,8 @@ function matchesQuery(node: DiscourseNode, queryWords: string[]): boolean {
  * @param query - Search query string
  * @param nodeType - Optional filter by node type
  * @param creator - Optional filter by creator name
+ * @param orderBy - Optional field to sort by (created, modified, title)
+ * @param sortDirection - Sort direction (asc or desc, default desc)
  * @param limit - Maximum results to return (default 10)
  * @returns Array of matching search results
  */
@@ -75,6 +77,8 @@ export function searchNodes(
   query: string,
   nodeType?: NodeType,
   creator?: string,
+  orderBy?: "created" | "modified" | "title",
+  sortDirection: "asc" | "desc" = "desc",
   limit: number = 10
 ): SearchResult[] {
   // Parse query into lowercase words
@@ -93,6 +97,28 @@ export function searchNodes(
     .filter(node =>
       !creator || node.creator.toLowerCase().includes(creator.toLowerCase())
     );
+
+  // Sort results if orderBy is specified
+  if (orderBy) {
+    results.sort((a, b) => {
+      let comparison = 0;
+
+      switch (orderBy) {
+        case "created":
+        case "modified":
+          // Compare dates as strings (ISO format)
+          comparison = a[orderBy].localeCompare(b[orderBy]);
+          break;
+        case "title":
+          // Compare titles alphabetically (case-insensitive)
+          comparison = a.titleClean.toLowerCase().localeCompare(b.titleClean.toLowerCase());
+          break;
+      }
+
+      // Apply sort direction
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }
 
   // Limit results
   results = results.slice(0, limit);

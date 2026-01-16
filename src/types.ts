@@ -1,15 +1,29 @@
 /**
  * Type definitions for the Discourse Graph MCP Server
  *
- * The discourse graph contains research nodes from the Akamatsu lab
- * on cellular biophysics (endocytosis, membrane tension, actin dynamics).
+ * This server can handle any discourse graph dataset with varying node grammars.
+ * Node types are dynamically loaded from the dataset's nodeSchema entries.
  */
 
-// Node types in the discourse graph - extracted from [[XXX]] prefix in titles
-export type NodeType = "RES" | "QUE" | "CON" | "EVD" | "CLM" | "HYP" | "ISS";
+// Node type is flexible - can be any string extracted from [[XXX]] prefix or schema labels
+export type NodeType = string;
 
-// All valid node type values for validation
-export const VALID_NODE_TYPES: NodeType[] = ["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS"];
+// Common node type abbreviations found in various discourse graphs
+// Note: Actual valid types are determined by the loaded dataset's nodeSchema
+export const COMMON_NODE_TYPES = [
+  "RES",  // Result
+  "QUE",  // Question
+  "CON",  // Conclusion
+  "EVD",  // Evidence
+  "CLM",  // Claim
+  "HYP",  // Hypothesis
+  "ISS",  // Issue
+  "SRC",  // Source
+  "FLW",  // Flow
+  "ART",  // Artifact
+  "PRJ",  // Project
+  "THY",  // Theory
+] as const;
 
 /**
  * Parsed and indexed discourse node
@@ -131,17 +145,17 @@ export interface NodeTypeSchema {
 }
 
 /**
- * Node type schemas - these explain what each type means
- * This is returned by the get_schema tool
+ * Common node type descriptions - these are fallbacks for common node types
+ * Actual schemas are loaded dynamically from each dataset's nodeSchema entries
  */
-export const NODE_TYPE_SCHEMAS: Record<NodeType, NodeTypeSchema> = {
+export const COMMON_NODE_TYPE_DESCRIPTIONS: Record<string, NodeTypeSchema> = {
   RES: {
     label: "Result",
     description: "Specific experimental or simulation observation with methodology context"
   },
   QUE: {
     label: "Question",
-    description: "Open research question the lab is investigating"
+    description: "Open research question being investigated"
   },
   CON: {
     label: "Conclusion",
@@ -153,7 +167,7 @@ export const NODE_TYPE_SCHEMAS: Record<NodeType, NodeTypeSchema> = {
   },
   CLM: {
     label: "Claim",
-    description: "Assertion about biological mechanisms"
+    description: "Assertion about mechanisms or phenomena"
   },
   HYP: {
     label: "Hypothesis",
@@ -162,5 +176,25 @@ export const NODE_TYPE_SCHEMAS: Record<NodeType, NodeTypeSchema> = {
   ISS: {
     label: "Issue",
     description: "Project task or analysis to be done"
+  },
+  SRC: {
+    label: "Source",
+    description: "Referenced publication or external resource"
+  },
+  FLW: {
+    label: "Flow",
+    description: "Process or workflow description"
+  },
+  ART: {
+    label: "Artifact",
+    description: "Generated output, document, or deliverable"
+  },
+  PRJ: {
+    label: "Project",
+    description: "Research project or initiative"
+  },
+  THY: {
+    label: "Theory",
+    description: "Theoretical framework or model"
   }
 };

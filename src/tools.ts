@@ -15,7 +15,7 @@
 import { z } from "zod";
 import { DataStore } from "./dataLoader.js";
 import { searchNodes } from "./search.js";
-import { NodeType, NODE_TYPE_SCHEMAS } from "./types.js";
+import { NodeType, COMMON_NODE_TYPE_DESCRIPTIONS } from "./types.js";
 
 /**
  * Fetch an image from URL and convert to base64
@@ -47,15 +47,24 @@ export const SearchNodesSchema = z.object({
     .string()
     .describe("Keywords to search for (e.g., 'membrane tension force capping')"),
   nodeType: z
-    .enum(["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS"])
+    .string()
     .optional()
     .describe(
-      "Filter by node type. RES=Results, QUE=Questions, CON=Conclusions, EVD=Evidence, CLM=Claims, HYP=Hypotheses, ISS=Issues"
+      "Filter by node type (e.g., 'RES', 'QUE', 'CON', 'EVD', 'CLM', 'HYP', 'ISS', 'Flow', 'Artifact', etc.). Use get_schema to see available node types."
     ),
   creator: z
     .string()
     .optional()
     .describe("Filter by researcher name (e.g., 'Matt Akamatsu')"),
+  orderBy: z
+    .enum(["created", "modified", "title"])
+    .optional()
+    .describe("Sort results by field (created = creation date, modified = last modified date, title = alphabetical)"),
+  sortDirection: z
+    .enum(["asc", "desc"])
+    .optional()
+    .default("desc")
+    .describe("Sort direction (asc = ascending/oldest first, desc = descending/newest first). Default is 'desc'"),
   limit: z
     .number()
     .optional()
@@ -90,9 +99,9 @@ export const GetResearcherContributionsSchema = z.object({
       "Researcher name to filter by (optional - if omitted, returns summary for all researchers)"
     ),
   nodeType: z
-    .enum(["RES", "QUE", "CON", "EVD", "CLM", "HYP", "ISS"])
+    .string()
     .optional()
-    .describe("Filter by node type")
+    .describe("Filter by node type (use get_schema to see available types)")
 });
 
 export const GetNodeImagesSchema = z.object({
@@ -118,6 +127,31 @@ export const GetRelationshipsSchema = z.object({
 
 export const GetRelationTypesSchema = z.object({});
 
+export const GetNodeNeighborhoodSchema = z.object({
+  uid: z
+    .string()
+    .describe("The UID of the starting node"),
+  depth: z
+    .number()
+    .min(1)
+    .max(4)
+    .default(2)
+    .describe("Number of hops to traverse from the starting node (1-4, default 2). Higher values may return many nodes."),
+  direction: z
+    .enum(["outgoing", "incoming", "both"])
+    .optional()
+    .default("both")
+    .describe("Direction to traverse: outgoing = follow links FROM this node, incoming = find nodes linking TO this node, both = bidirectional"),
+  nodeTypeFilter: z
+    .string()
+    .optional()
+    .describe("Only include nodes of this type in results (e.g., 'RES', 'CLM', 'EVD')"),
+  relationshipTypeFilter: z
+    .string()
+    .optional()
+    .describe("Only follow relationships of this type (e.g., 'Supports', 'Informs'). If omitted, follows all relationships.")
+});
+
 // ============================================================================
 // Tool Handlers
 // ============================================================================
@@ -134,6 +168,8 @@ export function handleSearchNodes(
     args.query,
     args.nodeType as NodeType | undefined,
     args.creator,
+    args.orderBy,
+    args.sortDirection,
     args.limit
   );
 
@@ -341,18 +377,35 @@ export function handleGetLinkedNodes(
 
 /**
  * Handle get_schema tool
+ * Returns the node types and schemas dynamically loaded from the dataset
  */
-export function handleGetSchema() {
+export function handleGetSchema(dataStore: DataStore) {
+  // Build node type schemas from loaded data
+  const nodeTypes: Record<string, { label: string; description: string; uid: string }> = {};
+
+  for (const [uid, schema] of dataStore.nodeSchemas.entries()) {
+    const label = schema.label;
+    const nodeType = schema.nodeType || label;
+
+    // Use common description if available, otherwise create a generic one
+    const description = COMMON_NODE_TYPE_DESCRIPTIONS[nodeType]?.description ||
+                       `${label} node in the discourse graph`;
+
+    nodeTypes[nodeType] = {
+      label,
+      description,
+      uid
+    };
+  }
+
   return {
     content: [
       {
         type: "text" as const,
         text: JSON.stringify(
           {
-            nodeTypes: NODE_TYPE_SCHEMAS,
-            domain:
-              "Cellular biophysics: endocytosis mechanics, membrane tension, actin architecture and dynamics, Cytosim simulations",
-            lab: "Akamatsu Lab",
+            nodeTypes,
+            totalSchemas: dataStore.nodeSchemas.size,
             dataSource: "Roam Research discourse graph"
           },
           null,
@@ -603,6 +656,179 @@ export function handleGetRelationTypes(dataStore: DataStore) {
   };
 }
 
+/**
+ * Handle get_node_neighborhood tool
+ * Get K-hop neighborhood around a node using breadth-first search
+ */
+export function handleGetNodeNeighborhood(
+  dataStore: DataStore,
+  args: z.infer<typeof GetNodeNeighborhoodSchema>
+) {
+  const startNode = dataStore.nodesByUid.get(args.uid);
+
+  if (!startNode) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ error: `Node not found: ${args.uid}` }, null, 2)
+        }
+      ],
+      isError: true
+    };
+  }
+
+  // Track visited nodes with their hop distance
+  const visited = new Map<string, number>();
+  visited.set(args.uid, 0);
+
+  // BFS queue: [nodeUid, currentDepth]
+  const queue: Array<[string, number]> = [[args.uid, 0]];
+
+  // Results organized by hop distance
+  const nodesByHop: Array<Array<{
+    uid: string;
+    nodeType: NodeType | null;
+    title: string;
+    creator: string;
+    relationshipType?: string;
+  }>> = Array.from({ length: args.depth + 1 }, () => []);
+
+  // Add starting node to hop 0
+  nodesByHop[0].push({
+    uid: startNode.uid,
+    nodeType: startNode.nodeType,
+    title: startNode.titleClean,
+    creator: startNode.creator
+  });
+
+  // BFS traversal
+  while (queue.length > 0) {
+    const [currentUid, currentDepth] = queue.shift()!;
+
+    // Stop if we've reached max depth
+    if (currentDepth >= args.depth) {
+      continue;
+    }
+
+    const currentNode = dataStore.nodesByUid.get(currentUid);
+    if (!currentNode) continue;
+
+    const neighbors = new Map<string, { nodeUid: string; relationshipType?: string }>();
+
+    // Collect outgoing neighbors
+    if (args.direction === "outgoing" || args.direction === "both") {
+      // Typed relationships
+      const outgoingRelations = dataStore.relationsBySource.get(currentUid) || [];
+      for (const relation of outgoingRelations) {
+        // Filter by relationship type if specified
+        if (args.relationshipTypeFilter && relation.label !== args.relationshipTypeFilter) {
+          continue;
+        }
+        neighbors.set(relation.destinationUid, {
+          nodeUid: relation.destinationUid,
+          relationshipType: relation.label
+        });
+      }
+
+      // Text references
+      if (!args.relationshipTypeFilter) {  // Text refs don't have relationship types
+        for (const linkedUid of currentNode.linkedNodeUids) {
+          if (!neighbors.has(linkedUid)) {
+            neighbors.set(linkedUid, { nodeUid: linkedUid });
+          }
+        }
+      }
+    }
+
+    // Collect incoming neighbors
+    if (args.direction === "incoming" || args.direction === "both") {
+      // Typed relationships
+      const incomingRelations = dataStore.relationsByDestination.get(currentUid) || [];
+      for (const relation of incomingRelations) {
+        // Filter by relationship type if specified
+        if (args.relationshipTypeFilter && relation.label !== args.relationshipTypeFilter) {
+          continue;
+        }
+        neighbors.set(relation.sourceUid, {
+          nodeUid: relation.sourceUid,
+          relationshipType: relation.label
+        });
+      }
+
+      // Text references (nodes that mention this node)
+      if (!args.relationshipTypeFilter) {
+        for (const node of dataStore.allNodes) {
+          if (node.uid !== currentUid && node.linkedNodeUids.includes(currentUid)) {
+            if (!neighbors.has(node.uid)) {
+              neighbors.set(node.uid, { nodeUid: node.uid });
+            }
+          }
+        }
+      }
+    }
+
+    // Process neighbors
+    for (const { nodeUid, relationshipType } of neighbors.values()) {
+      // Skip if already visited
+      if (visited.has(nodeUid)) {
+        continue;
+      }
+
+      const neighborNode = dataStore.nodesByUid.get(nodeUid);
+      if (!neighborNode) continue;
+
+      // Apply node type filter if specified
+      if (args.nodeTypeFilter && neighborNode.nodeType !== args.nodeTypeFilter) {
+        continue;
+      }
+
+      // Mark as visited and add to queue
+      const nextDepth = currentDepth + 1;
+      visited.set(nodeUid, nextDepth);
+      queue.push([nodeUid, nextDepth]);
+
+      // Add to results
+      nodesByHop[nextDepth].push({
+        uid: neighborNode.uid,
+        nodeType: neighborNode.nodeType,
+        title: neighborNode.titleClean,
+        creator: neighborNode.creator,
+        relationshipType
+      });
+    }
+  }
+
+  // Build summary statistics
+  const hopCounts = nodesByHop.map((nodes, hop) => ({
+    hop,
+    count: nodes.length
+  }));
+
+  const totalNodes = nodesByHop.reduce((sum, nodes) => sum + nodes.length, 0);
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(
+          {
+            startUid: args.uid,
+            startTitle: startNode.titleClean,
+            depth: args.depth,
+            direction: args.direction,
+            totalNodes,
+            hopCounts,
+            nodesByHop
+          },
+          null,
+          2
+        )
+      }
+    ]
+  };
+}
+
 // ============================================================================
 // Tool Definitions for MCP Server
 // ============================================================================
@@ -611,7 +837,7 @@ export const TOOL_DEFINITIONS = {
   search_nodes: {
     name: "search_nodes",
     description:
-      "Search the Akamatsu lab discourse graph for research nodes about endocytosis, membrane tension, actin dynamics, and related cellular biophysics. Use this when looking for specific Results, Conclusions, Evidence, Questions, Hypotheses, or Claims from the lab's research. Always include the researcher name when citing results.",
+      "Search the discourse graph for research nodes by keywords. Use this when looking for specific research contributions, questions, evidence, claims, or other node types. Always include the researcher name when citing results. Use get_schema to see what node types are available in this graph.",
     schema: SearchNodesSchema
   },
   get_node: {
@@ -623,13 +849,13 @@ export const TOOL_DEFINITIONS = {
   get_linked_nodes: {
     name: "get_linked_nodes",
     description:
-      "Get all nodes that are linked to/from a specific node. Use this to explore what Results support a Conclusion, what Questions a Result informs, or to trace reasoning chains through the discourse graph.",
+      "Get all nodes that are linked to/from a specific node. Use this to explore connections between nodes and trace reasoning chains through the discourse graph. Shows how different research contributions relate to each other.",
     schema: GetLinkedNodesSchema
   },
   get_schema: {
     name: "get_schema",
     description:
-      "Get the discourse graph ontology showing node types and their meanings. Use this to understand what types of nodes exist (Results, Questions, Conclusions, Evidence, Claims, Hypotheses, Issues) and how they relate.",
+      "Get the discourse graph ontology showing node types and their meanings. Use this to understand what types of nodes exist in this particular discourse graph and what they represent. Different graphs may have different node grammars.",
     schema: GetSchemaSchema
   },
   get_researcher_contributions: {
@@ -655,5 +881,11 @@ export const TOOL_DEFINITIONS = {
     description:
       "List all available relationship type definitions in the discourse graph (e.g., Supports, Informs, Opposes). Shows what types of semantic connections exist between nodes and how many instances of each type are present.",
     schema: GetRelationTypesSchema
+  },
+  get_node_neighborhood: {
+    name: "get_node_neighborhood",
+    description:
+      "Get the K-hop neighborhood around a node. Performs breadth-first traversal to find all nodes within N hops (1-4) of the starting node. Results are organized by hop distance. Use this to explore the local context around a research contribution or to find multi-hop reasoning chains. Supports filtering by node type and relationship type, and can traverse in any direction.",
+    schema: GetNodeNeighborhoodSchema
   }
 };

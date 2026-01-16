@@ -15,7 +15,6 @@ import {
   RawGraphEntry,
   JsonLdDocument,
   NodeType,
-  VALID_NODE_TYPES,
   RelationDef,
   RelationInstance,
   NodeSchema
@@ -76,9 +75,7 @@ function extractNodeType(title: string): NodeType | null {
   const match = title.match(NODE_TYPE_REGEX);
   if (match) {
     const type = match[1] as NodeType;
-    if (VALID_NODE_TYPES.includes(type)) {
-      return type;
-    }
+    return type;
   }
   return null;
 }
@@ -151,7 +148,7 @@ export interface DataStore {
  */
 function schemaUidToNodeType(schemaUid: string): NodeType | null {
   const match = schemaUid.match(/^_([A-Z]{3})-node$/);
-  if (match && VALID_NODE_TYPES.includes(match[1] as NodeType)) {
+  if (match) {
     return match[1] as NodeType;
   }
   return null;
